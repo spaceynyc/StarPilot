@@ -24,6 +24,13 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
 
 IONIQ_6_BLINDSPOT_RIGHT_MASK = 0x08
 IONIQ_6_BLINDSPOT_LEFT_MASK = 0x10
+# BSM gate: SIDE_DETECT_STATE fires on far and two-lanes-over traffic, so a side only
+# asserts after a front radar track confirms a car in the adjacent lane, then latches
+# while side-detect stays on (rear-quarter hold). Frame counts assume the ~100Hz
+# carstate update rate. Validated on lanes rlogs 2026-07-16.
+IONIQ_6_BSM_NEAR_MEMORY_FRAMES = 100   # 1.0s: in-zone track counts toward arming this long
+IONIQ_6_BSM_SD_RELEASE_FRAMES = 50     # 0.5s: side-detect must stay quiet this long to release
+IONIQ_6_BSM_STASH_STALE_FRAMES = 100   # 1.0s without a radar stash update -> fail open to raw
 CANFD_CAMERA_LEAD_MIN_DISTANCE = 0.1
 ALT_BUS_LDA_BUTTON_BURST_DEBOUNCE_NS = int(1.3e9)
 
@@ -67,6 +74,35 @@ class CarState(CarStateBase):
     if use_alt_lamp or car_fingerprint == CAR.HYUNDAI_KONA_EV_2ND_GEN:
       return "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
     return "LEFT_LAMP", "RIGHT_LAMP"
+
+  def _update_ioniq_6_bsm_gate(self):
+    # Arm a side once side-detect and a recent adjacent-lane radar track agree, hold while
+    # side-detect stays asserted (front radar loses cars that slide into the rear quarter),
+    # release only after side-detect stays quiet for the debounce window (raw bit has
+    # single-frame dropouts, seen in standstillmirror rlog). Fail open to raw side-detect
+    # when the track stash stops updating (radar dead / ECU disable failed).
+    if self.blindspot_track_stash_seq != self._bsm_stash_seq_prev:
+      self._bsm_stash_seq_prev = self.blindspot_track_stash_seq
+      self._bsm_stash_stale_frames = 0
+    else:
+      self._bsm_stash_stale_frames = min(self._bsm_stash_stale_frames + 1, IONIQ_6_BSM_STASH_STALE_FRAMES + 1)
+    tracks_fresh = self.blindspot_track_stash_seq > 0 and self._bsm_stash_stale_frames <= IONIQ_6_BSM_STASH_STALE_FRAMES
+
+    for side, sd, near in (("left", self.left_blindspot_from_radar, self.left_blindspot_track_near),
+                           ("right", self.right_blindspot_from_radar, self.right_blindspot_track_near)):
+      self._bsm_near_gap_frames[side] = 0 if near else min(self._bsm_near_gap_frames[side] + 1,
+                                                           IONIQ_6_BSM_NEAR_MEMORY_FRAMES + 1)
+      self._bsm_sd_gap_frames[side] = 0 if sd else min(self._bsm_sd_gap_frames[side] + 1,
+                                                       IONIQ_6_BSM_SD_RELEASE_FRAMES + 1)
+      if not tracks_fresh:
+        self._bsm_latched[side] = sd
+      elif sd and self._bsm_near_gap_frames[side] <= IONIQ_6_BSM_NEAR_MEMORY_FRAMES:
+        self._bsm_latched[side] = True
+      elif self._bsm_sd_gap_frames[side] > IONIQ_6_BSM_SD_RELEASE_FRAMES:
+        self._bsm_latched[side] = False
+
+    self.left_blindspot_gated = self._bsm_latched["left"]
+    self.right_blindspot_gated = self._bsm_latched["right"]
 
   def __init__(self, CP, FPCP):
     super().__init__(CP, FPCP)
@@ -136,12 +172,22 @@ class CarState(CarStateBase):
     self.blindspots_front_corner_1_ts = 0
     self.left_blindspot_from_radar = False
     self.right_blindspot_from_radar = False
-    # Radar-track adjacency for the spoofed BSM mirror gate, stashed by card from
-    # RadarData (front radar tracks). ts stays 0 when never updated, which makes
-    # the carcontroller gate fail open to the ungated side-detect bit.
+    # Radar-track adjacency stashed by card from RadarData (front radar tracks);
+    # card bumps stash_seq on every radar update so staleness is clock-free.
     self.left_blindspot_track_near = False
     self.right_blindspot_track_near = False
-    self.blindspot_track_update_ts = 0
+    self.blindspot_track_stash_seq = 0
+    # Gated + latched BSM state (single source for ret.left/rightBlindspot and the
+    # carcontroller mirror/cluster spoofs)
+    self.left_blindspot_gated = False
+    self.right_blindspot_gated = False
+    self._bsm_stash_seq_prev = 0
+    self._bsm_stash_stale_frames = IONIQ_6_BSM_STASH_STALE_FRAMES + 1
+    self._bsm_near_gap_frames = {"left": IONIQ_6_BSM_NEAR_MEMORY_FRAMES + 1,
+                                 "right": IONIQ_6_BSM_NEAR_MEMORY_FRAMES + 1}
+    self._bsm_sd_gap_frames = {"left": IONIQ_6_BSM_SD_RELEASE_FRAMES + 1,
+                               "right": IONIQ_6_BSM_SD_RELEASE_FRAMES + 1}
+    self._bsm_latched = {"left": False, "right": False}
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -472,12 +518,16 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
       self.left_blindspot_from_radar, self.right_blindspot_from_radar = decode_ioniq_6_blindspot_radar_state(
         cp.vl["BLINDSPOTS_FRONT_CORNER_2"]["SIDE_DETECT_STATE"])
+      self._update_ioniq_6_bsm_gate()
     if self.CP.enableBsm:
       if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+        # gated side-detect: raw bit also fires on far and two-lanes-over traffic. With OP
+        # long the ADAS ECU is disabled so the lane-filtered BCW verdict is gone entirely;
+        # with stock long the BCW verdict stays primary and the gate only cleans the OR-in.
         ret.leftBlindspot = (bool(cp.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_LtIndSta"]) or
-                             self.left_blindspot_from_radar)
+                             self.left_blindspot_gated)
         ret.rightBlindspot = (bool(cp.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_RtIndSta"]) or
-                              self.right_blindspot_from_radar)
+                              self.right_blindspot_gated)
       elif self.CP.flags & HyundaiFlags.CCNC:
         ret.leftBlindspot = bool(cp.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_LtIndSta"])
         ret.rightBlindspot = bool(cp.vl["BLINDSPOTS_REAR_CORNERS"]["BCW_RtIndSta"])

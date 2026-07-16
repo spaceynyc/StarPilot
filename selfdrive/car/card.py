@@ -238,7 +238,6 @@ class Car:
     if can_rcv_valid and REPLAY:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
 
-    # RD is only non-None on frames with valid CAN, so can_log_mono_time is set by here
     self._update_blindspot_track_state(RD)
 
     preap_software_cruise = (
@@ -389,10 +388,9 @@ class Car:
     self.CI.CS.openpilot_lead_rel_speed = lead_rel_speed
 
   def _update_blindspot_track_state(self, RD: structs.RadarDataT | None) -> None:
-    # Stash radar-track adjacency for the Hyundai CAN-FD spoofed-BSM mirror gate
-    # (yRel > 0 is left). Skipped frames leave the previous stash in place; if the
-    # radar stops updating entirely, the timestamp goes stale and the carcontroller
-    # gate fails open to its ungated side-detect input.
+    # Stash radar-track adjacency for the Hyundai CAN-FD BSM gate (yRel > 0 is left).
+    # Skipped frames leave the previous stash in place; the seq bump lets carstate
+    # detect staleness without cross-clock math and fail open to raw side-detect.
     if RD is None or any(RD.errors.to_dict().values()):
       return
 
@@ -406,7 +404,7 @@ class Car:
 
     self.CI.CS.left_blindspot_track_near = left
     self.CI.CS.right_blindspot_track_near = right
-    self.CI.CS.blindspot_track_update_ts = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
+    self.CI.CS.blindspot_track_stash_seq = getattr(self.CI.CS, "blindspot_track_stash_seq", 0) + 1
 
   def _update_redneck_cruise(self, CS: car.CarState, CC: car.CarControl) -> None:
     if self.redneck_cruise is None:

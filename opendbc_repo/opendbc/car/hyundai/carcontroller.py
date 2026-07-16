@@ -23,8 +23,6 @@ MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
 CANFD_BLINDSPOT_STATUS_STALE_NS = 200_000_000
-# fail-open window for the radar-track BSM gate; tracks refresh at 20Hz from card
-IONIQ_6_BLINDSPOT_TRACK_STALE_NS = 1_000_000_000
 CANFD_CAMERA_LEAD_STALE_NS = 300_000_000
 CANFD_LEAD_MIN_DISTANCE = 0.1
 CANFD_FALLBACK_LEAD_DISTANCE = 20.0
@@ -344,8 +342,6 @@ class CarController(CarControllerBase):
     self.long_active_ecu = self.CP.openpilotLongitudinalControl
     self._ioniq_6_lane_change_ui_side = None
     self._ioniq_6_lane_change_ui_frames = 0
-    self._ioniq_6_bsm_gate_left = False
-    self._ioniq_6_bsm_gate_right = False
     self._ioniq_6_long_tuning = Ioniq6LongitudinalTuningState()
     self._genesis_g90_long_tuning = GenesisG90LongitudinalTuningState()
     self._dash_lat_disengage_blink_frame = 0
@@ -765,22 +761,9 @@ class CarController(CarControllerBase):
                                                                             CS.out.gasPressed, self.CP.carFingerprint))
       elif not ccnc_non_hda2:
         can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
-      left_blindspot, right_blindspot = CS.left_blindspot_from_radar, CS.right_blindspot_from_radar
-      if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
-        # The raw SIDE_DETECT_STATE bit also fires on far and two-lanes-over traffic, so gate
-        # the mirror/cluster spoof on a front radar track actually in the adjacent lane, then
-        # latch while side-detect stays asserted so the lamp holds as a passed car slides into
-        # the rear quarter (validated on onelane/twolanes rlogs 2026-07-16). Fails open to the
-        # ungated bit if the track stash goes stale (radar dead / ECU disable failed).
-        tracks_fresh = CS.blindspot_track_update_ts > 0 and \
-          now_nanos - CS.blindspot_track_update_ts < IONIQ_6_BLINDSPOT_TRACK_STALE_NS
-        if tracks_fresh:
-          self._ioniq_6_bsm_gate_left = left_blindspot and (self._ioniq_6_bsm_gate_left or CS.left_blindspot_track_near)
-          self._ioniq_6_bsm_gate_right = right_blindspot and (self._ioniq_6_bsm_gate_right or CS.right_blindspot_track_near)
-          left_blindspot, right_blindspot = self._ioniq_6_bsm_gate_left, self._ioniq_6_bsm_gate_right
-        else:
-          self._ioniq_6_bsm_gate_left = False
-          self._ioniq_6_bsm_gate_right = False
+      # gated + latched in carstate (_update_ioniq_6_bsm_gate): only asserts once a front
+      # radar track confirms the side-detect car is actually in the adjacent lane
+      left_blindspot, right_blindspot = CS.left_blindspot_gated, CS.right_blindspot_gated
       if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6 and self.frame % 5 == 0:
         rear_stale = now_nanos - CS.blindspots_rear_corners_ts > CANFD_BLINDSPOT_STATUS_STALE_NS
         front_stale = now_nanos - CS.blindspots_front_corner_1_ts > CANFD_BLINDSPOT_STATUS_STALE_NS
