@@ -136,6 +136,12 @@ class CarState(CarStateBase):
     self.blindspots_front_corner_1_ts = 0
     self.left_blindspot_from_radar = False
     self.right_blindspot_from_radar = False
+    # Radar-track adjacency for the spoofed BSM mirror gate, stashed by card from
+    # RadarData (front radar tracks). ts stays 0 when never updated, which makes
+    # the carcontroller gate fail open to the ungated side-detect bit.
+    self.left_blindspot_track_near = False
+    self.right_blindspot_track_near = False
+    self.blindspot_track_update_ts = 0
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0

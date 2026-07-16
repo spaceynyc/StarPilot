@@ -36,6 +36,14 @@ REPLAY = "REPLAY" in os.environ
 OPENPILOT_LEAD_MIN_DISTANCE = 0.1
 REDNECK_DECREASE_LOOKAHEAD_POINTS = 10
 
+# Adjacent-lane zone for the spoofed-BSM mirror gate (Hyundai CAN-FD): a front radar
+# track counts as "car one lane over" only inside this envelope. Lat band excludes
+# own-lane leads (<1.9 m) and two-lanes-over traffic (>5.5 m); thresholds validated
+# on Ioniq 6 onelane/twolanes rlogs 2026-07-16.
+BSM_TRACK_LONG_MAX = 15.0
+BSM_TRACK_LAT_MIN = 1.9
+BSM_TRACK_LAT_MAX = 5.5
+
 EventName = log.OnroadEvent.EventName
 
 # forward
@@ -230,6 +238,9 @@ class Car:
     if can_rcv_valid and REPLAY:
       self.can_log_mono_time = messaging.log_from_bytes(can_strs[0]).logMonoTime
 
+    # RD is only non-None on frames with valid CAN, so can_log_mono_time is set by here
+    self._update_blindspot_track_state(RD)
+
     preap_software_cruise = (
       self.CP.brand == "tesla" and self.CP.carFingerprint == "TESLA_MODEL_S_PREAP" and
       self.CP.openpilotLongitudinalControl and not self.CP.pcmCruise
@@ -376,6 +387,26 @@ class Car:
     self.CI.CS.openpilot_lead_visible = lead_visible
     self.CI.CS.openpilot_lead_distance = lead_distance
     self.CI.CS.openpilot_lead_rel_speed = lead_rel_speed
+
+  def _update_blindspot_track_state(self, RD: structs.RadarDataT | None) -> None:
+    # Stash radar-track adjacency for the Hyundai CAN-FD spoofed-BSM mirror gate
+    # (yRel > 0 is left). Skipped frames leave the previous stash in place; if the
+    # radar stops updating entirely, the timestamp goes stale and the carcontroller
+    # gate fails open to its ungated side-detect input.
+    if RD is None or any(RD.errors.to_dict().values()):
+      return
+
+    left = right = False
+    for pt in RD.points:
+      if 0.0 < pt.dRel < BSM_TRACK_LONG_MAX and BSM_TRACK_LAT_MIN <= abs(pt.yRel) <= BSM_TRACK_LAT_MAX:
+        if pt.yRel > 0.0:
+          left = True
+        else:
+          right = True
+
+    self.CI.CS.left_blindspot_track_near = left
+    self.CI.CS.right_blindspot_track_near = right
+    self.CI.CS.blindspot_track_update_ts = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
 
   def _update_redneck_cruise(self, CS: car.CarState, CC: car.CarControl) -> None:
     if self.redneck_cruise is None:
