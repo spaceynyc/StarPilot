@@ -616,7 +616,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"TinygradUpdateAvailable", {PERSISTENT, BOOL, "0", "0", 1}},
     {"ToyotaDoors", {PERSISTENT, BOOL, "1", "0", 0}},
     {"TrailerLoad", {PERSISTENT, INT, "0", "0", 2}},
-    {"TrafficFollow", {PERSISTENT, FLOAT, "0.5", "0.5", 2}},
+    {"TrafficFollow", {PERSISTENT, FLOAT, "0.75", "0.75", 2}},
     {"TrafficJerkAcceleration", {PERSISTENT, FLOAT, "100.0", "100.0", 3}},
     {"TrafficJerkDanger", {PERSISTENT, FLOAT, "100.0", "100.0", 3}},
     {"TrafficJerkDeceleration", {PERSISTENT, FLOAT, "100.0", "100.0", 3}},

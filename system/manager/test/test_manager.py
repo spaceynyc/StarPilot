@@ -375,6 +375,33 @@ class TestManager:
     assert params.get("TrafficJerkAcceleration") == "80.0"
     assert params_cache.get("TrafficJerkAcceleration") is None
 
+  def test_migrate_traffic_follow_default_resets_legacy_default_only(self, tmp_path, monkeypatch):
+    monkeypatch.setattr(manager, "STARPILOT_TRAFFIC_FOLLOW_MIGRATION_FLAG", tmp_path / "starpilot_traffic_follow_v1")
+
+    params = FileBackedFakeParams(tmp_path / "params", {
+      "TrafficFollow": 0.5,
+    })
+    params_cache = FileBackedFakeParams(tmp_path / "cache", {})
+
+    manager.migrate_traffic_follow_default(params, params_cache)
+
+    assert params.get("TrafficFollow") == "0.75"
+    assert params_cache.get("TrafficFollow") == "0.75"
+    assert manager.STARPILOT_TRAFFIC_FOLLOW_MIGRATION_FLAG.exists()
+
+  def test_migrate_traffic_follow_default_preserves_custom_values(self, tmp_path, monkeypatch):
+    monkeypatch.setattr(manager, "STARPILOT_TRAFFIC_FOLLOW_MIGRATION_FLAG", tmp_path / "starpilot_traffic_follow_v1")
+
+    params = FileBackedFakeParams(tmp_path / "params", {
+      "TrafficFollow": 1.2,
+    })
+    params_cache = FileBackedFakeParams(tmp_path / "cache", {})
+
+    manager.migrate_traffic_follow_default(params, params_cache)
+
+    assert params.get("TrafficFollow") == "1.2"
+    assert params_cache.get("TrafficFollow") is None
+
   def test_migrate_traffic_mode_smooth_defaults_runs_once(self, tmp_path, monkeypatch):
     monkeypatch.setattr(manager, "STARPILOT_TRAFFIC_SMOOTH_MIGRATION_FLAG", tmp_path / "starpilot_traffic_smooth_v1")
 
