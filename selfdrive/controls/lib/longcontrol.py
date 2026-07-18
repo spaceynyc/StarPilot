@@ -396,7 +396,8 @@ class LongControl:
     )
     return a_target * effective_gain
 
-  def update(self, active, CS, a_target, should_stop, accel_limits, starpilot_toggles, has_lead=False, traffic_mode_enabled=False):
+  def update(self, active, CS, a_target, should_stop, accel_limits, starpilot_toggles, has_lead=False,
+             traffic_mode_enabled=False, profile_max_accel=0.0):
     """Update longitudinal control. This updates the state machine and runs a PID loop"""
     self.pid.neg_limit = accel_limits[0]
     self.pid.pos_limit = accel_limits[1]
@@ -425,6 +426,10 @@ class LongControl:
         output_accel = clip(a_target, 0.0, starpilot_toggles.startAccel)
       elif getattr(starpilot_toggles, "custom_accel_profile", False):
         output_accel = clip(a_target, 0.0, starpilot_toggles.startAccel)
+      elif profile_max_accel > 0.0:
+        # Keep the StartAccel friction-overcoming shove, but cap it at the selected
+        # acceleration profile's launch ceiling so Eco launches soft and Sport hard.
+        output_accel = min(starpilot_toggles.startAccel, profile_max_accel)
       else:
         output_accel = starpilot_toggles.startAccel
       self.reset()
