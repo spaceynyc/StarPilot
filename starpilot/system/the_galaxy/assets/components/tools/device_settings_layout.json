@@ -229,6 +229,27 @@
         "settings_tier": "simple"
       },
       {
+        "key": "LaneChangeCloseGap",
+        "label": "Close Gap On Lane Change",
+        "description": "Shorten the follow gap while signalling out of the lane so openpilot flows out smoothly instead of braking behind a lead it is about to leave. The gap is restored instantly if the lead brakes, closing speed is high, or the blindspot is occupied.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "parent_key": "LaneChanges",
+        "settings_tier": "simple"
+      },
+      {
+        "key": "LaneChangeCloseGapFactor",
+        "label": "Close Gap Amount",
+        "description": "How much to shorten the follow gap during a lane change. Lower values allow openpilot closer to the lead while transitioning out of the lane.",
+        "data_type": "float",
+        "ui_type": "numeric",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.05,
+        "parent_key": "LaneChanges",
+        "settings_tier": "simple"
+      },
+      {
         "key": "LateralTune",
         "label": "Lateral Tuning",
         "description": "Miscellaneous steering control changes to fine-tune how openpilot drives.",

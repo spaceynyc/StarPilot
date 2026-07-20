@@ -51,6 +51,8 @@ StarPilotLateralPanel::StarPilotLateralPanel(StarPilotSettingsWindow *parent, bo
     {"LaneDetectionWidth", tr("Minimum Lane Width"), tr("<b>Prevent automatic lane changes into lanes narrower than the set width.</b>"), ""},
     {"OneLaneChange", tr("One Lane Change Per Signal"), tr("<b>Limit automatic lane changes to one per turn-signal activation.</b>"), ""},
     {"LaneChangeSmoothing", tr("Lane Change Smoothing"), tr("<b>Controls how smoothly openpilot commits to a lane change.</b> 10 is stock behavior; lower values produce a gentler, more gradual maneuver. 1 stretches the maneuver to ~8 seconds."), ""},
+    {"LaneChangeCloseGap", tr("Close Gap On Lane Change"), tr("<b>Shorten the follow gap while signalling out of the lane</b> so openpilot flows out smoothly instead of braking behind a lead it is about to leave. The gap is restored instantly if the lead brakes, closing speed is high, or the blindspot is occupied."), ""},
+    {"LaneChangeCloseGapFactor", tr("Close Gap Amount"), tr("<b>How much to shorten the follow gap during a lane change.</b> Lower values allow openpilot closer to the lead while transitioning out of the lane."), ""},
 
     {"LateralTune", tr("Lateral Tuning"), tr("<b>Miscellaneous steering control changes</b> to fine-tune how openpilot drives."), "../../starpilot/assets/toggle_icons/icon_lateral_tune.png"},
     {"TurnDesires", tr("Force Turn Desires Below Lane Change Speed"), tr("<b>While driving below the minimum lane change speed with an active turn signal, instruct openpilot to turn left/right.</b>"), ""},
@@ -118,6 +120,12 @@ StarPilotLateralPanel::StarPilotLateralPanel(StarPilotSettingsWindow *parent, bo
       smoothingLabels[10] = tr("Stock");
       smoothingLabels[1] = tr("Smoothest");
       lateralToggle = new StarPilotParamValueControl(param, title, desc, icon, 1, 10, QString(), smoothingLabels, 1);
+    } else if (param == "LaneChangeCloseGapFactor") {
+      std::map<float, QString> closeGapLabels;
+      for (float i = 0.5; i <= 1.0001; i += 0.05) {
+        closeGapLabels[i] = QString::number(std::lround(i * 100)) + "%";
+      }
+      lateralToggle = new StarPilotParamValueControl(param, title, desc, icon, 0.5, 1.0, QString(), closeGapLabels, 0.05);
 
     } else if (param == "LateralTune") {
       StarPilotManageControl *lateralTuneToggle = new StarPilotManageControl(param, title, desc, icon);
@@ -182,7 +190,7 @@ StarPilotLateralPanel::StarPilotLateralPanel(StarPilotSettingsWindow *parent, bo
     });
   }
 
-  QSet<QString> forceUpdateKeys = {"ForceAutoTune", "ForceAutoTuneOff", "LateralTune", "NNFF", "NudgelessLaneChange"};
+  QSet<QString> forceUpdateKeys = {"ForceAutoTune", "ForceAutoTuneOff", "LaneChangeCloseGap", "LateralTune", "NNFF", "NudgelessLaneChange"};
   for (const QString &key : forceUpdateKeys) {
     QObject::connect(static_cast<ToggleControl*>(toggles[key]), &ToggleControl::toggleFlipped, this, &StarPilotLateralPanel::updateToggles);
   }
@@ -370,6 +378,10 @@ void StarPilotLateralPanel::updateToggles() {
       else if (key == "ForceTorqueController") {
         setVisible &= !parent->isAngleCar;
         setVisible &= !parent->isTorqueCar;
+      }
+
+      else if (key == "LaneChangeCloseGapFactor") {
+        setVisible &= params.getBool("LaneChanges") && params.getBool("LaneChangeCloseGap");
       }
 
       else if (key == "LaneChangeTime") {
