@@ -2902,6 +2902,14 @@
         "settings_tier": "simple"
       },
       {
+        "key": "ParkingSensorNormallyOff",
+        "label": "Parking Sensor Normally Off",
+        "description": "Automatically turn the parking sensor back off each time you shift into Drive or Reverse. If you manually turn it on afterward, comma leaves it on until the next drive. Ioniq 6 only.",
+        "data_type": "bool",
+        "ui_type": "toggle",
+        "settings_tier": "simple"
+      },
+      {
         "key": "CancelButtonControl",
         "label": "Cancel Button (Short Press)",
         "description": "Action performed when the remapped \"Cancel\" button is pressed.",

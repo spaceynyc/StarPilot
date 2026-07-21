@@ -466,6 +466,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"WheelButtonBookmarkCounter", {CLEAR_ON_MANAGER_START, INT, "0", "0"}},
     {"openpilotMinutes", {PERSISTENT, INT, "0", "0", 0}},
     {"OverpassRequests", {PERSISTENT, JSON, "{}", "{}"}},
+    {"ParkingSensorNormallyOff", {PERSISTENT, BOOL, "0", "0", 2, SETTINGS_SIMPLE}},
     {"PathColor", {PERSISTENT, STRING, "", "", 2, SETTINGS_SIMPLE}},
     {"PathEdgesColor", {PERSISTENT, STRING, "", "", 2, SETTINGS_SIMPLE}},
     {"PathEdgeWidth", {PERSISTENT, FLOAT, "20.0", "0.0", 2, SETTINGS_SIMPLE}},

@@ -642,6 +642,21 @@ def create_ioniq_6_cluster_blindspot_messages(CAN, frame, left_blindspot=False, 
   return ret
 
 
+# Captured PARKING_ASSIST_BUTTON (0x3E5) OFF-state bodies (PARK_BUTTON=0). The checksum
+# algorithm is unknown, so we replay captured bodies verbatim instead of repacking; rotating
+# gives multiple valid (counter, checksum) pairs.
+IONIQ_6_PARK_OFF_BODIES = [
+  bytes.fromhex("8b90050000000000"),
+  bytes.fromhex("e4b0050000000000"),
+  bytes.fromhex("55d0050000000000"),
+]
+
+
+def create_ioniq_6_park_off_messages(CAN, idx, copies=1):
+  body = IONIQ_6_PARK_OFF_BODIES[idx % len(IONIQ_6_PARK_OFF_BODIES)]
+  return [(0x3E5, body, CAN.ECAN) for _ in range(copies)]
+
+
 def create_ioniq_6_cluster_lane_change_messages(CAN, frame, side=None):
   if side not in IONIQ_6_CLUSTER_LANE_CHANGE_3C1:
     return []

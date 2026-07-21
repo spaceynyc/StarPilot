@@ -32,6 +32,10 @@ HYUNDAI_CANFD_SCC_DECEL_STEP = 12.5 / 50.0
 IONIQ_6_RESPONSE_MULTIPLIER = 1.2
 IONIQ_6_CANFD_SCC_ACCEL_STEP = (6.0 / 50.0) * IONIQ_6_RESPONSE_MULTIPLIER
 IONIQ_6_CANFD_SCC_DECEL_STEP = (15.0 / 50.0) * IONIQ_6_RESPONSE_MULTIPLIER
+# "Parking Sensor Normally Off": auto-off the park sensor only in a window after D/R entry
+IONIQ_6_PARK_OFF_WINDOW_FRAMES = 100          # ~1.0 s window at 100Hz
+IONIQ_6_PARK_OFF_MIN_SEND_INTERVAL_FRAMES = 30  # ~0.3 s debounce
+IONIQ_6_PARK_OFF_BURST_COPIES = 2             # copies per burst; tune on car
 GENESIS_G90_STOP_HOLD_SPEED_BP = [0.0, 0.03, 0.08, 0.16, 0.3, 0.5, 0.8, 1.2, 2.0, 3.0]
 GENESIS_G90_STOP_HOLD_ACCEL_V = [-0.10, -0.10, -0.12, -0.18, -0.30, -0.50, -0.75, -1.00, -1.40, -1.80]
 GENESIS_G90_STOP_HOLD_RELAX_SPEED_BP = [0.0, 0.08, 0.16, 0.3, 0.5, 0.8, 1.2, 2.0, 3.0]
@@ -416,6 +420,11 @@ class CarController(CarControllerBase):
     self._dash_lat_disengage_blink_frame = 0
     self._dash_lat_disengage_init = False
     self._dash_prev_lat_active = False
+    # "Parking Sensor Normally Off" state (Ioniq 6)
+    self._park_prev_gear = None
+    self._park_off_window_end_frame = 0
+    self._park_last_send_frame = 0
+    self._park_send_idx = 0
 
   def _update_dash_icon_state(self, CC):
     if CC.latActive:
@@ -493,6 +502,35 @@ class CarController(CarControllerBase):
     CS.redneck_last_sent_button = getattr(CS, "redneck_send_button", 0)
     self.last_button_frame = self.frame
     return can_sends
+
+  def _create_ioniq_6_park_off_messages(self, CS, starpilot_toggles):
+    GearShifter = structs.CarState.GearShifter
+    gear = CS.out.gearShifter
+
+    if not getattr(starpilot_toggles, "parking_sensor_normally_off", False):
+      self._park_prev_gear = gear
+      return []
+
+    drive_or_reverse = gear in (GearShifter.drive, GearShifter.reverse)
+    entered_dr = drive_or_reverse and self._park_prev_gear not in (GearShifter.drive, GearShifter.reverse)
+    self._park_prev_gear = gear
+
+    # re-arm the window on each fresh D/R entry; after it closes, respect a manual activation
+    if entered_dr:
+      self._park_off_window_end_frame = self.frame + IONIQ_6_PARK_OFF_WINDOW_FRAMES
+    if self.frame >= self._park_off_window_end_frame:
+      return []
+
+    if not getattr(CS, "park_button_state", 0):
+      return []
+
+    # PARK_BUTTON is a toggle: one accepted burst flips it off, then park_button_state==0 stops us
+    if (self.frame - self._park_last_send_frame) < IONIQ_6_PARK_OFF_MIN_SEND_INTERVAL_FRAMES:
+      return []
+
+    self._park_last_send_frame = self.frame
+    self._park_send_idx += 1
+    return hyundaicanfd.create_ioniq_6_park_off_messages(self.CAN, self._park_send_idx, IONIQ_6_PARK_OFF_BURST_COPIES)
 
   def update(self, CC, CS, now_nanos, starpilot_toggles):
     actuators = CC.actuators
@@ -866,6 +904,8 @@ class CarController(CarControllerBase):
                                                                                  CS.right_blindspot_from_radar,
                                                                                  CC.leftBlinker,
                                                                                  CC.rightBlinker))
+      if self.CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+        can_sends.extend(self._create_ioniq_6_park_off_messages(CS, starpilot_toggles))
       if self.frame % 2 == 0:
         lead_visible, lead_distance, lead_rel_speed = self._get_canfd_scc_lead_state(CC, CS, now_nanos)
         acc_kwargs = {

@@ -117,6 +117,8 @@ class CarState(CarStateBase):
                                  "CRUISE_BUTTONS"
     self.is_metric = False
     self.buttons_counter = 0
+    self.park_button_state = 0
+    self.park_button_counter_alt = 0
 
     self.cruise_info = {}
     self.msg_161 = {}
@@ -501,6 +503,8 @@ class CarState(CarStateBase):
       self.blindspots_front_corner_1 = copy.copy(cp.vl["BLINDSPOTS_FRONT_CORNER_1"])
       self.blindspots_rear_corners_ts = cp.ts_nanos["BLINDSPOTS_REAR_CORNERS"]["CHECKSUM"]
       self.blindspots_front_corner_1_ts = cp.ts_nanos["BLINDSPOTS_FRONT_CORNER_1"]["CHECKSUM"]
+      self.park_button_state = int(cp.vl["PARKING_ASSIST_BUTTON"]["PARK_BUTTON"])
+      self.park_button_counter_alt = int(cp.vl["PARKING_ASSIST_BUTTON"]["COUNTER_ALT"])
 
     # cruise state
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
@@ -624,6 +628,8 @@ class CarState(CarStateBase):
       msgs.append(("DRIVE_MODE_EV", 0))  # optional: not all CAN-FD EV variants publish drive mode
       msgs.append(("MANUAL_SPEED_LIMIT_ASSIST", 0))  # optional: used for non-adaptive cruise state and Ioniq 6 i-Pedal latch detection
     msgs.append(("STEERING_WHEEL_MEDIA_BUTTONS", 0))  # optional: absent or slower on some CAN-FD variants
+    if CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+      msgs.append(("PARKING_ASSIST_BUTTON", 0))  # optional: Ioniq 6 park-sensor button, on ECAN
     cam_msgs.append(("ADAS_0x380", 0))  # optional: dashboard stop-sign signal, only on ADAS-equipped HKG CANFD
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),

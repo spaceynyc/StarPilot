@@ -75,6 +75,7 @@ def get_test_starpilot_toggles() -> SimpleNamespace:
     force_fingerprint=False,
     frogsgomoo_tweak=False,
     lock_doors=False,
+    parking_sensor_normally_off=False,
     reverse_cruise_increase=False,
     sng_hack=False,
     subaru_sng=False,

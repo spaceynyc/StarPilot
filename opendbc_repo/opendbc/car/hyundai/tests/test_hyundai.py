@@ -2457,6 +2457,25 @@ class TestHyundaiFingerprint:
     both_msgs = hyundaicanfd.create_ioniq_6_cluster_blindspot_messages(can_bus, 0, True, True)
     assert both_msgs == []
 
+  def test_ioniq_6_park_off_helper_replays_captured_off_bodies(self):
+    CP = CarParams.new_message()
+    CP.carFingerprint = CAR.HYUNDAI_IONIQ_6
+    CP.flags = int(HyundaiFlags.CANFD | HyundaiFlags.CANFD_LKA_STEERING)
+
+    can_bus = CanBus(CP)
+
+    for idx in range(len(hyundaicanfd.IONIQ_6_PARK_OFF_BODIES) * 2):
+      msgs = hyundaicanfd.create_ioniq_6_park_off_messages(can_bus, idx, copies=2)
+      assert len(msgs) == 2
+      for addr, dat, bus in msgs:
+        assert addr == 0x3E5
+        assert bus == can_bus.ECAN
+        assert len(dat) == 8
+        assert (dat[2] >> 6) & 1 == 0  # PARK_BUTTON off
+
+    bodies = hyundaicanfd.IONIQ_6_PARK_OFF_BODIES
+    assert hyundaicanfd.create_ioniq_6_park_off_messages(can_bus, 1, copies=1) == [(0x3E5, bodies[1], can_bus.ECAN)]
+
   def test_ioniq_6_cluster_lane_change_helper_replays_stock_animation_family(self):
     CP = CarParams.new_message()
     CP.carFingerprint = CAR.HYUNDAI_IONIQ_6

@@ -938,6 +938,7 @@ class StarPilotVariables:
     toggle.no_onroad_uploads = self.get_value("DisableOnroadUploads", condition=toggle.no_uploads)
 
     toggle.nostalgia_mode = self.get_value("NostalgiaMode", condition=toggle.openpilot_longitudinal and toggle.car_model == HYUNDAI_CAR.HYUNDAI_IONIQ_6)
+    toggle.parking_sensor_normally_off = self.get_value("ParkingSensorNormallyOff", condition=toggle.car_model == HYUNDAI_CAR.HYUNDAI_IONIQ_6)
     toggle.remap_cancel_to_distance = self.get_value(
       "RemapCancelToDistance",
       condition=toggle.car_make == "gm" and toggle.has_pedal and "BOLT" in toggle.car_model,

@@ -77,6 +77,21 @@ StarPilotWheelPanel::StarPilotWheelPanel(StarPilotSettingsWindow *parent, bool f
     update();
   });
 
+  ParamControl *parkingSensorOffToggle = new ParamControl(
+    "ParkingSensorNormallyOff",
+    tr("Parking Sensor Normally Off"),
+    tr("<b>Automatically turn the parking sensor back off each time you shift into Drive or Reverse. If you manually turn it on afterward, comma leaves it on until the next drive. Ioniq 6 only.</b>"),
+    "../../starpilot/assets/toggle_icons/icon_mute.png"
+  );
+  toggles["ParkingSensorNormallyOff"] = parkingSensorOffToggle;
+  addItem(parkingSensorOffToggle);
+  QObject::connect(parkingSensorOffToggle, &AbstractControl::hideDescriptionEvent, [this]() {
+    update();
+  });
+  QObject::connect(parkingSensorOffToggle, &AbstractControl::showDescriptionEvent, [this]() {
+    update();
+  });
+
   const std::vector<std::tuple<QString, QString, QString, QString>> wheelToggles {
     {"CancelButtonControl", tr("Cancel Button"), tr("<b>Action performed when the remapped \"Cancel\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
     {"DistanceButtonControl", tr("Distance Button"), tr("<b>Action performed when the \"Distance\" button is pressed.</b>"), "../../starpilot/assets/toggle_icons/icon_mute.png"},
@@ -163,6 +178,10 @@ void StarPilotWheelPanel::updateToggles() {
     if (!showAllToggles && key == "NostalgiaMode") {
       setVisible &= parent->isHKGCanFd;
       setVisible &= parent->hasOpenpilotLongitudinal;
+    }
+
+    if (!showAllToggles && key == "ParkingSensorNormallyOff") {
+      setVisible &= parent->isIoniq6;
     }
 
     if (!showAllToggles && (

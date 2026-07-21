@@ -341,6 +341,7 @@ void StarPilotSettingsWindow::updateVariables() {
     hasSDSU = starpilot_toggles.value("has_sdsu").toBool();
     hasZSS = starpilot_toggles.value("has_zss").toBool();
     isBolt = fallbackFingerprint.rfind("CHEVROLET_BOLT", 0) == 0;
+    isIoniq6 = fallbackFingerprint == "HYUNDAI_IONIQ_6";
     isGM = carMake == "gm";
     isHKG = carMake == "hyundai";
     isHKGCanFd = isHKG && hasModeStarButtons;
@@ -378,6 +379,7 @@ void StarPilotSettingsWindow::updateVariables() {
     hasZSS = starpilot_toggles.value("has_zss").toBool();
     isAngleCar = CP.getSteerControlType() == cereal::CarParams::SteerControlType::ANGLE;
     isBolt = carFingerprint.rfind("CHEVROLET_BOLT", 0) == 0;
+    isIoniq6 = carFingerprint == "HYUNDAI_IONIQ_6";
     isGM = carMake == "gm";
     isHKG = carMake == "hyundai";
     isHKGCanFd = isHKG && safetyModel == cereal::CarParams::SafetyModel::HYUNDAI_CANFD;

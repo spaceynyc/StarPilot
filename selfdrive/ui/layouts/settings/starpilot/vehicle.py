@@ -460,6 +460,14 @@ class VehicleSettingsManagerView(PanelManagerView):
         "set_state": lambda s: self._controller._on_toggle("NostalgiaMode"),
       })
 
+    if cs.isIoniq6:
+      toggles.append({
+        "title": tr("Parking Sensor Normally Off"),
+        "subtitle": tr("Auto-turn the parking sensor back off when entering Drive or Reverse. Manual presses afterward are respected until the next drive."),
+        "get_state": lambda: self._controller._params.get_bool("ParkingSensorNormallyOff"),
+        "set_state": lambda s: self._controller._on_toggle("ParkingSensorNormallyOff"),
+      })
+
     return toggles
 
   def _rebuild_toggle_grid(self):

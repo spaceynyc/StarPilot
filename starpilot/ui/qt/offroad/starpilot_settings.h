@@ -35,6 +35,7 @@ public:
   bool hasZSS = false;
   bool isAngleCar = false;
   bool isBolt = false;
+  bool isIoniq6 = false;
   bool isFrogsGoMoo = false;
   bool isGM = true;
   bool isHKG = true;
