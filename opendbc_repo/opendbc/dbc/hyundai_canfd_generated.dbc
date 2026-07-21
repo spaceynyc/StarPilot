@@ -891,6 +891,11 @@ BO_ 874 BLINDSPOTS_FRONT_CORNER_2: 16 XXX
 BO_ 896 ADAS_0x380: 24 XXX
  SG_ STOP_SIGN : 83|1@1+ (1,0) [0|1] "" XXX
 
+BO_ 997 PARKING_ASSIST_BUTTON: 8 XXX
+ SG_ CHECKSUM_MAYBE : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ COUNTER_ALT : 15|4@0+ (1,0) [0|15] "" XXX
+ SG_ PARK_BUTTON : 22|1@0+ (1,0) [0|1] "" XXX
+
 BO_ 961 BLINKER_STALKS: 8 XXX
  SG_ CHECKSUM_MAYBE : 7|8@0+ (1,0) [0|255] "" XXX
  SG_ COUNTER_ALT : 15|4@0+ (1,0) [0|15] "" XXX
@@ -1098,6 +1103,7 @@ CM_ SG_ 1041 COUNTER_ALT "only increments on change";
 CM_ BO_ 1043 "Lamp signals do not seem universal on cars that use LKAS_ALT, but stalk signals do.";
 CM_ SG_ 1043 COUNTER_ALT "only increments on change";
 CM_ SG_ 1043 USE_ALT_LAMP "likely 1 on cars that use alt lamp signals";
+CM_ SG_ 1096 CUSTOM_BUTTON "Steering wheel custom button, aka the Star button";
 VAL_ 53 GEAR 0 "P" 5 "D" 6 "N" 7 "R";
 VAL_ 64 GEAR 0 "P" 5 "D" 6 "N" 7 "R";
 VAL_ 69 GEAR 0 "P" 5 "D" 6 "N" 7 "R";
