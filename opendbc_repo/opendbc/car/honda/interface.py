@@ -247,8 +247,18 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]]
 
     elif candidate in (CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
+      if candidate == CAR.HONDA_INSIGHT and eps_modified:
+        # NRDR Insight tune for the 39990-TXM,A040 linear-max EPS firmware.
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.06], [0.02]]
+        ret.lateralTuning.pid.kf = 0.000024
+        speed_bp = [0., 25. * CV.MPH_TO_MS, 50. * CV.MPH_TO_MS]
+        ret.lateralTuning.pid.kfBP, ret.lateralTuning.pid.kfV = [speed_bp, [2.4e-5, 1.2e-5, 1.2e-5]]
+        ret.steerAtStandstill, ret.autoResumeSng = True, True
+        ret.minEnableSpeed, ret.minSteerSpeed = -1.0, -1.0
+      else:
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
 
     elif candidate in (CAR.HONDA_E, CAR.HONDA_E_ADVANCE):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end

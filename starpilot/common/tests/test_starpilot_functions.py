@@ -1,5 +1,6 @@
 from openpilot.starpilot.common import connect_server as cs
 from openpilot.starpilot.common import starpilot_functions as sf
+from openpilot.starpilot.common import starpilot_utilities as su
 
 
 class FakeParams:
@@ -9,8 +10,8 @@ class FakeParams:
   def get(self, key):
     return self.values.get(key)
 
-  def get_bool(self, key):
-    return self.values.get(key) in (True, 1, "1", b"1")
+  def get_bool(self, key, default=False):
+    return self.values.get(key, default) in (True, 1, "1", b"1")
 
   def put(self, key, value):
     self.values[key] = value
@@ -25,6 +26,15 @@ class FakeParams:
 class FakeThreadManager:
   def is_thread_alive(self, name):
     return False
+
+
+def test_konik_server_is_the_missing_param_default(monkeypatch):
+  monkeypatch.setattr(su, "Params", lambda: FakeParams())
+  su.use_konik_server.cache_clear()
+
+  assert su.use_konik_server()
+
+  su.use_konik_server.cache_clear()
 
 
 def test_automatic_update_requests_guarded_reboot(monkeypatch):
@@ -63,18 +73,17 @@ def test_automatic_update_requests_guarded_reboot(monkeypatch):
   assert params.get("DoReboot") == b"1"
 
 
-def test_sync_konik_dongle_id_preserves_stock_id_before_switching(monkeypatch, tmp_path):
+def test_sync_konik_dongle_id_reuses_existing_id(monkeypatch, tmp_path):
   monkeypatch.setattr(cs.Paths, "persist_root", staticmethod(lambda: str(tmp_path)))
   monkeypatch.setattr(cs, "use_konik_server", lambda: True)
-  monkeypatch.setattr(cs, "register", lambda **kwargs: "konik-dongle")
 
   params = FakeParams({"DongleId": "stock-dongle"})
 
   cs.sync_konik_dongle_id(params)
 
   assert params.get("StockDongleId") == "stock-dongle"
-  assert params.get("KonikDongleId") == "konik-dongle"
-  assert params.get("DongleId") == "konik-dongle"
+  assert params.get("KonikDongleId") == "stock-dongle"
+  assert params.get("DongleId") == "stock-dongle"
 
 
 def test_sync_konik_dongle_id_restores_stock_id_from_persist(monkeypatch, tmp_path):
@@ -97,7 +106,7 @@ def test_sync_konik_dongle_id_restores_stock_id_from_persist(monkeypatch, tmp_pa
   assert params.get("DongleId") == "stock-dongle"
 
 
-def test_sync_konik_dongle_id_skips_missing_stock_backup(monkeypatch, tmp_path):
+def test_sync_konik_dongle_id_uses_current_id_when_backup_is_missing(monkeypatch, tmp_path):
   monkeypatch.setattr(cs.Paths, "persist_root", staticmethod(lambda: str(tmp_path)))
   monkeypatch.setattr(cs, "use_konik_server", lambda: False)
 
@@ -109,26 +118,34 @@ def test_sync_konik_dongle_id_skips_missing_stock_backup(monkeypatch, tmp_path):
   cs.sync_konik_dongle_id(params)
 
   assert params.get("DongleId") == "konik-dongle"
-  assert params.get("StockDongleId") is None
+  assert params.get("StockDongleId") == "konik-dongle"
 
 
-def test_prepare_konik_server_switch_clears_cached_konik_id():
-  params = FakeParams({"KonikDongleId": "konik-dongle"})
-  params_cache = FakeParams({"KonikDongleId": "konik-dongle"})
+def test_prepare_konik_server_switch_reuses_id_in_live_and_cache(monkeypatch, tmp_path):
+  monkeypatch.setattr(cs.Paths, "persist_root", staticmethod(lambda: str(tmp_path)))
+  params = FakeParams({"DongleId": "stock-dongle"})
+  params_cache = FakeParams()
 
   cs.prepare_konik_server_switch(True, params, params_cache)
 
   assert params.get("UseKonikServer") == b"1"
-  assert params.get("KonikDongleId") is None
-  assert params_cache.get("KonikDongleId") is None
+  assert params_cache.get("UseKonikServer") == b"1"
+  assert params.get("DongleId") == "stock-dongle"
+  assert params.get("StockDongleId") == "stock-dongle"
+  assert params.get("KonikDongleId") == "stock-dongle"
+  assert params_cache.get("DongleId") == "stock-dongle"
+  assert params_cache.get("StockDongleId") == "stock-dongle"
+  assert params_cache.get("KonikDongleId") == "stock-dongle"
 
 
-def test_prepare_konik_server_switch_clears_cached_stock_id():
-  params = FakeParams({"DongleId": "konik-dongle"})
-  params_cache = FakeParams({"DongleId": "konik-dongle"})
+def test_prepare_konik_server_switch_restores_stock_id(monkeypatch, tmp_path):
+  monkeypatch.setattr(cs.Paths, "persist_root", staticmethod(lambda: str(tmp_path)))
+  params = FakeParams({"DongleId": "legacy-konik-dongle", "StockDongleId": "stock-dongle"})
+  params_cache = FakeParams({"DongleId": "legacy-konik-dongle"})
 
   cs.prepare_konik_server_switch(False, params, params_cache)
 
   assert params.get("UseKonikServer") == b"0"
-  assert params.get("DongleId") is None
-  assert params_cache.get("DongleId") is None
+  assert params_cache.get("UseKonikServer") == b"0"
+  assert params.get("DongleId") == "stock-dongle"
+  assert params_cache.get("DongleId") == "stock-dongle"

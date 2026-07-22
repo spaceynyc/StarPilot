@@ -5,6 +5,7 @@ import pytest
 from opendbc.car import structs
 from opendbc.car.structs import CarParams
 from opendbc.car import gen_empty_fingerprint
+from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.interface import CarInterface
 from opendbc.car.honda.carcontroller import (
   CarController,
@@ -114,12 +115,13 @@ class TestHondaFingerprint:
     assert wind_factor == pytest.approx(1.3)
     assert wind_factor_before_brake == pytest.approx(1.3)
 
-  def test_official_modified_eps_firmwares_restored(self):
+  def test_supported_modified_eps_firmwares_restored(self):
     assert b'39990-TVA,A150\x00\x00' in FW_VERSIONS[CAR.HONDA_ACCORD][(CarParams.Ecu.eps, 0x18DA30F1, None)]
     assert b'39990-TBA,A030\x00\x00' in FW_VERSIONS[CAR.HONDA_CIVIC][(CarParams.Ecu.eps, 0x18DA30F1, None)]
     assert b'39990-TBA-C120\x00\x00' in FW_VERSIONS[CAR.HONDA_CIVIC_BOSCH][(CarParams.Ecu.eps, 0x18DA30F1, None)]
     assert b'39990-TGG,A020\x00\x00' in FW_VERSIONS[CAR.HONDA_CIVIC_BOSCH][(CarParams.Ecu.eps, 0x18DA30F1, None)]
     assert b'39990-TLA,A040\x00\x00' in FW_VERSIONS[CAR.HONDA_CRV_5G][(CarParams.Ecu.eps, 0x18DA30F1, None)]
+    assert b'39990-TXM,A040\x00\x00' in FW_VERSIONS[CAR.HONDA_INSIGHT][(CarParams.Ecu.eps, 0x18DA30F1, None)]
 
   def test_modified_eps_candidates_keep_support_and_restore_upstream_tunes(self):
     toggles = SimpleNamespace(force_torque_controller=False, nnff=False, nnff_lite=False)
@@ -153,6 +155,29 @@ class TestHondaFingerprint:
     assert list(crv_cp.lateralParams.torqueV) == [0, 2560, 3840]
     assert list(crv_cp.lateralTuning.pid.kpV) == pytest.approx([0.21])
     assert list(crv_cp.lateralTuning.pid.kiV) == pytest.approx([0.07])
+
+    insight_fw = [CarParams.CarFw(ecu=CarParams.Ecu.eps, fwVersion=b'39990-TXM,A040\x00\x00', address=0x18DA30F1, subAddress=0)]
+    insight_cp = CarInterface.get_params(CAR.HONDA_INSIGHT, gen_empty_fingerprint(), insight_fw, False, False, False, toggles)
+    assert not insight_cp.dashcamOnly
+    assert insight_cp.flags & HondaFlags.EPS_MODIFIED
+    assert list(insight_cp.lateralParams.torqueBP) == [0, 3840]
+    assert list(insight_cp.lateralParams.torqueV) == [0, 3840]
+    assert list(insight_cp.lateralTuning.pid.kpV) == pytest.approx([0.06])
+    assert list(insight_cp.lateralTuning.pid.kiV) == pytest.approx([0.02])
+    assert insight_cp.lateralTuning.pid.kf == pytest.approx(2.4e-5)
+    assert list(insight_cp.lateralTuning.pid.kfBP) == pytest.approx([0.0, 25.0 * CV.MPH_TO_MS, 50.0 * CV.MPH_TO_MS])
+    assert list(insight_cp.lateralTuning.pid.kfV) == pytest.approx([2.4e-5, 1.2e-5, 1.2e-5])
+    assert insight_cp.steerAtStandstill
+    assert insight_cp.minEnableSpeed == pytest.approx(-1.0)
+    assert insight_cp.minSteerSpeed == pytest.approx(-1.0)
+
+    stock_insight_fw = [CarParams.CarFw(ecu=CarParams.Ecu.eps, fwVersion=b'39990-TXM-A040\x00\x00', address=0x18DA30F1, subAddress=0)]
+    stock_insight_cp = CarInterface.get_params(CAR.HONDA_INSIGHT, gen_empty_fingerprint(), stock_insight_fw, False, False, False, toggles)
+    assert not stock_insight_cp.flags & HondaFlags.EPS_MODIFIED
+    assert list(stock_insight_cp.lateralParams.torqueBP) == [0, 4096]
+    assert list(stock_insight_cp.lateralParams.torqueV) == [0, 4096]
+    assert list(stock_insight_cp.lateralTuning.pid.kpV) == pytest.approx([0.6])
+    assert list(stock_insight_cp.lateralTuning.pid.kiV) == pytest.approx([0.18])
 
   def test_modified_civic_bosch_keeps_official_support(self):
     toggles = SimpleNamespace(force_torque_controller=False, nnff=False, nnff_lite=False)

@@ -1,10 +1,12 @@
 from pathlib import Path
 
 from openpilot.common.params import Params
-from openpilot.system.athena.registration import register
 from openpilot.system.hardware.hw import Paths
 
 from openpilot.starpilot.common.starpilot_utilities import use_konik_server
+
+
+UNREGISTERED_DONGLE_ID = "UnregisteredDevice"
 
 
 def _cache_params_path() -> str:
@@ -20,39 +22,51 @@ def _normalize_dongle_id(value):
   return value or None
 
 
+def _usable_dongle_id(value):
+  value = _normalize_dongle_id(value)
+  return value if value not in (None, UNREGISTERED_DONGLE_ID) else None
+
+
 def _read_persisted_stock_dongle_id():
   persisted_dongle_id_path = Path(Paths.persist_root()) / "comma" / "dongle_id"
   if not persisted_dongle_id_path.is_file():
     return None
-  return _normalize_dongle_id(persisted_dongle_id_path.read_text())
-
-
-def _remove_param_from_live_and_cache(key, params, params_cache=None):
-  if params_cache is None:
-    params_cache = Params(_cache_params_path())
-  params.remove(key)
-  params_cache.remove(key)
+  return _usable_dongle_id(persisted_dongle_id_path.read_text())
 
 
 def prepare_konik_server_switch(use_konik, params, params_cache=None):
+  if params_cache is None:
+    params_cache = Params(_cache_params_path())
+
+  stable_dongle_id = _ensure_stock_dongle_id(params)
+  if stable_dongle_id is None:
+    stable_dongle_id = _usable_dongle_id(params.get("DongleId"))
+
   params.put_bool("UseKonikServer", use_konik)
-  if use_konik:
-    _remove_param_from_live_and_cache("KonikDongleId", params, params_cache)
-  else:
-    _remove_param_from_live_and_cache("DongleId", params, params_cache)
+  params_cache.put_bool("UseKonikServer", use_konik)
+
+  # Konik accepts the device's existing ID. Reusing it avoids a second
+  # registration and keeps switching endpoints a local, instant operation.
+  if stable_dongle_id is not None:
+    params.put("DongleId", stable_dongle_id)
+    params_cache.put("DongleId", stable_dongle_id)
+    params.put("StockDongleId", stable_dongle_id)
+    params_cache.put("StockDongleId", stable_dongle_id)
+    if use_konik:
+      params.put("KonikDongleId", stable_dongle_id)
+      params_cache.put("KonikDongleId", stable_dongle_id)
 
 
 def _ensure_stock_dongle_id(params):
-  current_dongle_id = _normalize_dongle_id(params.get("DongleId"))
-  konik_dongle_id = _normalize_dongle_id(params.get("KonikDongleId"))
-  stock_dongle_id = _normalize_dongle_id(params.get("StockDongleId"))
+  current_dongle_id = _usable_dongle_id(params.get("DongleId"))
+  stock_dongle_id = _usable_dongle_id(params.get("StockDongleId"))
 
-  if stock_dongle_id not in (None, konik_dongle_id):
+  if stock_dongle_id is not None:
     return stock_dongle_id
 
   candidate = _read_persisted_stock_dongle_id()
-  if candidate in (None, konik_dongle_id):
-    candidate = current_dongle_id if current_dongle_id != konik_dongle_id else None
+  if candidate is None:
+    candidate = current_dongle_id
 
   if candidate is not None and candidate != stock_dongle_id:
     params.put("StockDongleId", candidate)
@@ -61,16 +75,17 @@ def _ensure_stock_dongle_id(params):
 
 
 def sync_konik_dongle_id(params):
-  current_dongle_id = _normalize_dongle_id(params.get("DongleId"))
-  konik_dongle_id = _normalize_dongle_id(params.get("KonikDongleId"))
+  current_dongle_id = _usable_dongle_id(params.get("DongleId"))
   stock_dongle_id = _ensure_stock_dongle_id(params)
+  stable_dongle_id = stock_dongle_id or _read_persisted_stock_dongle_id() or current_dongle_id
 
   if use_konik_server():
-    if konik_dongle_id is None:
-      konik_dongle_id = _normalize_dongle_id(register(show_spinner=True, register_konik=True))
-      if konik_dongle_id is not None:
-        params.put("KonikDongleId", konik_dongle_id)
-    if konik_dongle_id is not None and current_dongle_id != konik_dongle_id:
-      params.put("DongleId", konik_dongle_id)
-  elif current_dongle_id == konik_dongle_id and stock_dongle_id is not None:
+    # Never contact pilotauth from the boot path. NRDR uses the already-issued
+    # device ID with Konik; doing the same also avoids Konik's 403 response for
+    # serials that are already registered.
+    if stable_dongle_id is not None:
+      params.put("KonikDongleId", stable_dongle_id)
+      if current_dongle_id != stable_dongle_id:
+        params.put("DongleId", stable_dongle_id)
+  elif stock_dongle_id is not None and current_dongle_id != stock_dongle_id:
     params.put("DongleId", stock_dongle_id)

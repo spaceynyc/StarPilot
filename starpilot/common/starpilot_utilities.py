@@ -369,7 +369,7 @@ def update_json_file(path, data):
 @cache
 def use_konik_server():
   # Prefer the persistent toggle over volatile cache files.
-  return Params().get_bool("UseKonikServer")
+  return Params().get_bool("UseKonikServer", default=True)
 
 
 def wait_for_no_driver(params, sm, door_checks=False, time_threshold=60):
