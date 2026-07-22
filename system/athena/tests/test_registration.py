@@ -65,6 +65,43 @@ class TestRegistration:
     assert m.call_count == 1
     assert self.params.get("DongleId") == dongle
 
+  def test_konik_reuses_existing_id_without_registration(self, mocker):
+    self._generate_keys()
+    dongle = "DONGLE_ID_123"
+    self.params.put("DongleId", dongle)
+    self.params.put_bool("UseKonikServer", True)
+    m = mocker.patch("openpilot.system.athena.registration.api_get", autospec=True)
+
+    assert register(register_konik=True) == dongle
+    assert m.call_count == 0
+    assert self.params.get("KonikDongleId") == dongle
+
+  def test_registration_timeout_disables_konik_and_boots_unregistered(self, mocker):
+    self._generate_keys()
+    self.params.put_bool("UseKonikServer", True)
+    m = mocker.patch("openpilot.system.athena.registration.api_get", autospec=True)
+
+    assert register(timeout=0) == UNREGISTERED_DONGLE_ID
+    assert m.call_count == 0
+    assert not self.params.get_bool("UseKonikServer")
+    assert self.params.get_bool("DoReboot")
+
+  def test_registration_retry_obeys_hard_deadline(self, mocker):
+    self._generate_keys()
+    self.params.put_bool("UseKonikServer", True)
+    clock = [0.0]
+    mocker.patch("openpilot.system.athena.registration.time.monotonic", side_effect=lambda: clock[0])
+    mocker.patch("openpilot.system.athena.registration.time.sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    mocker.patch("openpilot.system.athena.registration.HARDWARE.get_imei", side_effect=lambda slot: f"imei-{slot}")
+    m = mocker.patch("openpilot.system.athena.registration.api_get", side_effect=OSError("offline"))
+
+    assert register(timeout=0.5) == UNREGISTERED_DONGLE_ID
+    assert m.call_count == 1
+    assert m.call_args.kwargs["timeout"] <= 0.25
+    assert clock[0] == 0.5
+    assert not self.params.get_bool("UseKonikServer")
+    assert self.params.get_bool("DoReboot")
+
   def test_unregistered(self, mocker):
     # keys exist, but unregistered
     self._generate_keys()
