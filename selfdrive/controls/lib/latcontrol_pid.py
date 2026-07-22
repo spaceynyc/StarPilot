@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 from cereal import log
 from opendbc.car.honda.carcontroller import get_civic_bosch_modified_steering_pressed
@@ -27,6 +28,12 @@ def get_honda_lateral_pid_gain_scale(value) -> float:
 
 def scale_lateral_pid_gain_values(values, scale: float) -> list[float]:
   return [float(value) * scale for value in values]
+
+
+def get_lateral_pid_feedforward_factor(base_kf: float, kf_bp, kf_v, v_ego: float) -> float:
+  if kf_bp and len(kf_bp) == len(kf_v):
+    return float(np.interp(v_ego, kf_bp, kf_v))
+  return float(base_kf)
 
 
 def get_civic_bosch_modified_pid_output_scale(desired_angle_deg: float, desired_angle_delta_deg: float, v_ego: float) -> float:
@@ -92,6 +99,8 @@ class LatControlPID(LatControl):
                              (self.base_ki_bp, self.base_ki_v),
                              pos_limit=self.steer_max, neg_limit=-self.steer_max)
     self.ff_factor = CP.lateralTuning.pid.kf
+    self.kf_bp = list(CP.lateralTuning.pid.kfBP)
+    self.kf_v = list(CP.lateralTuning.pid.kfV)
     self.get_steer_feedforward = CI.get_steer_feedforward_function()
     self.is_honda_pid_lateral = CP.brand == "honda"
     self.honda_lateral_pid_kp_scale = 1.0
@@ -139,7 +148,8 @@ class LatControlPID(LatControl):
 
     else:
       # offset does not contribute to resistive torque
-      ff = self.ff_factor * self.get_steer_feedforward(angle_steers_des_no_offset, CS.vEgo)
+      ff_factor = get_lateral_pid_feedforward_factor(self.ff_factor, self.kf_bp, self.kf_v, CS.vEgo)
+      ff = ff_factor * self.get_steer_feedforward(angle_steers_des_no_offset, CS.vEgo)
       steering_pressed = CS.steeringPressed
       if self.is_civic_bosch_modified:
         self.modified_civic_steering_pressed_filter_s, steering_pressed = get_civic_bosch_modified_steering_pressed(

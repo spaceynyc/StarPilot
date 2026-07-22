@@ -1,5 +1,6 @@
 from openpilot.starpilot.common import connect_server as cs
 from openpilot.starpilot.common import starpilot_functions as sf
+from openpilot.starpilot.common import starpilot_utilities as su
 
 
 class FakeParams:
@@ -9,8 +10,8 @@ class FakeParams:
   def get(self, key):
     return self.values.get(key)
 
-  def get_bool(self, key):
-    return self.values.get(key) in (True, 1, "1", b"1")
+  def get_bool(self, key, default=False):
+    return self.values.get(key, default) in (True, 1, "1", b"1")
 
   def put(self, key, value):
     self.values[key] = value
@@ -25,6 +26,15 @@ class FakeParams:
 class FakeThreadManager:
   def is_thread_alive(self, name):
     return False
+
+
+def test_konik_server_is_the_missing_param_default(monkeypatch):
+  monkeypatch.setattr(su, "Params", lambda: FakeParams())
+  su.use_konik_server.cache_clear()
+
+  assert su.use_konik_server()
+
+  su.use_konik_server.cache_clear()
 
 
 def test_automatic_update_requests_guarded_reboot(monkeypatch):

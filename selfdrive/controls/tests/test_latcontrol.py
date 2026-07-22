@@ -19,6 +19,7 @@ from openpilot.selfdrive.controls.lib.latcontrol_pid import (
   LatControlPID,
   get_civic_bosch_modified_pid_output_alpha,
   get_civic_bosch_modified_pid_output_scale,
+  get_lateral_pid_feedforward_factor,
 )
 from openpilot.selfdrive.controls.lib.latcontrol_vehicle_tunes import (
   clear_flm_runtime_overrides,
@@ -953,6 +954,15 @@ class TestLatControl:
 
     assert controller.pid._k_p[1] == pytest.approx([value * 2.0 for value in base_kp_v])
     assert controller.pid._k_i[1] == pytest.approx([value * 1.25 for value in base_ki_v])
+
+  def test_lateral_pid_feedforward_factor_uses_speed_breakpoints(self):
+    speed_bp = [0.0, 25.0, 50.0]
+    kf_v = [2.4e-5, 1.2e-5, 1.2e-5]
+
+    assert get_lateral_pid_feedforward_factor(9.9e-5, [], [], 10.0) == pytest.approx(9.9e-5)
+    assert get_lateral_pid_feedforward_factor(9.9e-5, speed_bp, kf_v, 0.0) == pytest.approx(2.4e-5)
+    assert get_lateral_pid_feedforward_factor(9.9e-5, speed_bp, kf_v, 12.5) == pytest.approx(1.8e-5)
+    assert get_lateral_pid_feedforward_factor(9.9e-5, speed_bp, kf_v, 50.0) == pytest.approx(1.2e-5)
 
   def test_modified_civic_b_torque_path_uses_fixed_friction_threshold(self, monkeypatch):
     CarInterface = interfaces[HONDA.HONDA_CIVIC_BOSCH]
